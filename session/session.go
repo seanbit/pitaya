@@ -43,6 +43,7 @@ type sessionPoolImpl struct {
 	afterBindCallbacks   []func(ctx context.Context, s Session) error
 	handshakeValidators  map[string]func(data *HandshakeData) error
 
+	SessionAck func(s Session) error
 	// SessionCloseCallbacks contains global session close callbacks
 	SessionCloseCallbacks []func(s Session)
 	sessionsByUID         sync.Map
@@ -59,6 +60,7 @@ type SessionPool interface {
 	GetSessionCloseCallbacks() []func(s Session)
 	GetSessionByUID(uid string) Session
 	GetSessionByID(id int64) Session
+	OnSessionAck(f func(s Session) error)
 	OnSessionBind(f func(ctx context.Context, s Session) error)
 	OnAfterSessionBind(f func(ctx context.Context, s Session) error)
 	OnSessionClose(f func(s Session))
@@ -92,7 +94,7 @@ type sessionImpl struct {
 	handshakeData       *HandshakeData                        // handshake data received by the client
 	handshakeValidators map[string]func(*HandshakeData) error // validations to run on handshake
 	encodedData         []byte                                // session data encoded as a byte array
-	OnCloseCallbacks    []func()                              //onClose callbacks
+	OnCloseCallbacks    []func()                              // onClose callbacks
 	IsFrontend          bool                                  // if session is a frontend session
 	frontendID          string                                // the id of the frontend that owns the session
 	frontendSessionID   int64                                 // the id of the session on the frontend server
@@ -111,6 +113,7 @@ type ReqInFlight struct {
 // Session instance related to the client will be passed to Handler method in the
 // context parameter.
 type Session interface {
+	Ack() error
 	GetOnCloseCallbacks() []func()
 	GetIsFrontend() bool
 	GetSubscriptions() []*nats.Subscription
@@ -238,6 +241,10 @@ func (pool *sessionPoolImpl) GetSessionByID(id int64) Session {
 	return nil
 }
 
+func (pool *sessionPoolImpl) OnSessionAck(f func(s Session) error) {
+	pool.SessionAck = f
+}
+
 // OnSessionBind adds a method to be called when a session is bound
 // same function cannot be added twice!
 func (pool *sessionPoolImpl) OnSessionBind(f func(ctx context.Context, s Session) error) {
@@ -317,6 +324,13 @@ func (s *sessionImpl) updateEncodedData() error {
 		return err
 	}
 	s.encodedData = b
+	return nil
+}
+
+func (s *sessionImpl) Ack() error {
+	if s.pool.SessionAck != nil {
+		return s.pool.SessionAck(s)
+	}
 	return nil
 }
 

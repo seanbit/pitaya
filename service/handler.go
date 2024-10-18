@@ -266,6 +266,14 @@ func (h *HandlerService) processPacket(a agent.Agent, p *packet.Packet) error {
 		logger.Log.Debug("Successfully saved handshake data")
 
 	case packet.HandshakeAck:
+		if a.GetStatus() < constants.StatusHandshake {
+			return fmt.Errorf("receive data on socket which is not yet Handshake, session will be closed immediately, remote=%s",
+				a.RemoteAddr().String())
+		}
+		if err := a.GetSession().Ack(); err != nil {
+			return fmt.Errorf("receive ack but can not continue:%s, session will be closed immediately, remote=%s",
+				err.Error(), a.RemoteAddr().String())
+		}
 		a.SetStatus(constants.StatusWorking)
 		logger.Log.Debugf("Receive handshake ACK Id=%d, Remote=%s", a.GetSession().ID(), a.RemoteAddr())
 
