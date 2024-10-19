@@ -819,6 +819,18 @@ func (mr *MockSessionPoolMockRecorder) OnAfterSessionBind(arg0 interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnAfterSessionBind", reflect.TypeOf((*MockSessionPool)(nil).OnAfterSessionBind), arg0)
 }
 
+
+func (m *MockSessionPool) OnSessionAck(arg0 func(s session.Session) error) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "OnSessionAck", arg0)
+}
+
+// OnSessionBind indicates an expected call of OnSessionBind.
+func (mr *MockSessionPoolMockRecorder) OnSessionAck(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnSessionAck", reflect.TypeOf((*MockSessionPool)(nil).OnSessionAck), arg0)
+}
+
 // OnSessionBind mocks base method.
 func (m *MockSessionPool) OnSessionBind(arg0 func(context.Context, session.Session) error) {
 	m.ctrl.T.Helper()

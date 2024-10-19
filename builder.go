@@ -43,6 +43,7 @@ type Builder struct {
 	Worker           *worker.Worker
 	RemoteHooks      *pipeline.RemoteHooks
 	HandlerHooks     *pipeline.HandlerHooks
+	DispatchPolicy   service.DispatchPolicy
 }
 
 // PitayaBuilder Builder interface
@@ -240,6 +241,7 @@ func (builder *Builder) Build() Pitaya {
 		builder.HandlerHooks,
 		handlerPool,
 	)
+	handlerService.SetDispatchPolicy(builder.DispatchPolicy)
 
 	app := NewApp(
 		builder.ServerMode,

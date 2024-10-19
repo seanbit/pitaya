@@ -73,6 +73,7 @@ type (
 		agentFactory     agent.AgentFactory
 		handlerPool      *HandlerPool
 		handlers         map[string]*component.Handler // all handler method
+		dispatchPolicy   DispatchPolicy
 	}
 
 	unhandledMessage struct {
@@ -81,6 +82,7 @@ type (
 		route *route.Route
 		msg   *message.Message
 	}
+	DispatchPolicy func(m unhandledMessage) uint8
 )
 
 // NewHandlerService creates and returns a new handler service
@@ -113,6 +115,10 @@ func NewHandlerService(
 	h.handlerHooks = handlerHooks
 
 	return h
+}
+
+func (h *HandlerService) SetDispatchPolicy(policy DispatchPolicy) {
+	h.dispatchPolicy = policy
 }
 
 // Dispatch message to corresponding logic handler
@@ -330,14 +336,31 @@ func (h *HandlerService) processMessage(a agent.Agent, msg *message.Message) {
 		msg:   msg,
 	}
 	if r.SvType == h.server.Type {
-		h.chLocalProcess <- message
+		h.dispatchLocal(message)
 	} else {
-		if h.remoteService != nil {
-			h.chRemoteProcess <- message
-		} else {
-			logger.Log.Warnf("request made to another server type but no remoteService running")
-		}
+		h.dispatchRemote(message)
 	}
+}
+
+func (h *HandlerService) dispatchLocal(lm unhandledMessage) {
+	if h.dispatchPolicy == nil || h.dispatchPolicy(lm) == 0 {
+		h.chLocalProcess <- lm
+		return
+	}
+	metrics.ReportMessageProcessDelayFromCtx(lm.ctx, h.metricsReporters, "local")
+	h.localProcess(lm.ctx, lm.agent, lm.route, lm.msg)
+}
+
+func (h *HandlerService) dispatchRemote(rm unhandledMessage) {
+	if h.remoteService == nil {
+		logger.Log.Warnf("request made to another server type but no remoteService running")
+		return
+	}
+	if h.dispatchPolicy == nil || h.dispatchPolicy(rm) == 0 {
+		h.chRemoteProcess <- rm
+	}
+	metrics.ReportMessageProcessDelayFromCtx(rm.ctx, h.metricsReporters, "remote")
+	h.remoteService.remoteProcess(rm.ctx, nil, rm.agent, rm.route, rm.msg)
 }
 
 func (h *HandlerService) localProcess(ctx context.Context, a agent.Agent, route *route.Route, msg *message.Message) {
