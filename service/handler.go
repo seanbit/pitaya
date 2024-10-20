@@ -82,7 +82,7 @@ type (
 		route *route.Route
 		msg   *message.Message
 	}
-	DispatchPolicy func(m unhandledMessage) uint8
+	DispatchPolicy func(route *route.Route) int8
 )
 
 // NewHandlerService creates and returns a new handler service
@@ -329,6 +329,15 @@ func (h *HandlerService) processMessage(a agent.Agent, msg *message.Message) {
 		r.SvType = h.server.Type
 	}
 
+	policy := int8(0)
+	if h.dispatchPolicy != nil {
+		policy = h.dispatchPolicy(r)
+	}
+	if policy == -1 {
+		logger.Log.Error("Can not dispatch route: %v", *r)
+		a.AnswerWithError(ctx, msg.ID, e.NewError(err, e.ErrServiceUnavailable))
+		return
+	}
 	message := unhandledMessage{
 		ctx:   ctx,
 		agent: a,
@@ -336,24 +345,20 @@ func (h *HandlerService) processMessage(a agent.Agent, msg *message.Message) {
 		msg:   msg,
 	}
 	if r.SvType == h.server.Type {
-		h.dispatchLocal(message)
+		h.dispatchLocal(message, policy)
 	} else {
-		h.dispatchRemote(message)
+		h.dispatchRemote(message, policy)
 	}
 }
 
-func (h *HandlerService) dispatchLocal(lm unhandledMessage) {
-	policy := uint8(0)
-	if h.dispatchPolicy != nil {
-		policy = h.dispatchPolicy(lm)
-	}
+func (h *HandlerService) dispatchLocal(lm unhandledMessage, policy int8) {
 	switch policy {
 	case 0:
 		h.chLocalProcess <- lm
 	case 1:
 		metrics.ReportMessageProcessDelayFromCtx(lm.ctx, h.metricsReporters, "local")
 		h.localProcess(lm.ctx, lm.agent, lm.route, lm.msg)
-	default:
+	case 2:
 		go func(lm unhandledMessage) {
 			metrics.ReportMessageProcessDelayFromCtx(lm.ctx, h.metricsReporters, "local")
 			h.localProcess(lm.ctx, lm.agent, lm.route, lm.msg)
@@ -361,14 +366,10 @@ func (h *HandlerService) dispatchLocal(lm unhandledMessage) {
 	}
 }
 
-func (h *HandlerService) dispatchRemote(rm unhandledMessage) {
+func (h *HandlerService) dispatchRemote(rm unhandledMessage, policy int8) {
 	if h.remoteService == nil {
 		logger.Log.Warnf("request made to another server type but no remoteService running")
 		return
-	}
-	policy := uint8(0)
-	if h.dispatchPolicy != nil {
-		policy = h.dispatchPolicy(rm)
 	}
 	switch policy {
 	case 0:
@@ -376,7 +377,7 @@ func (h *HandlerService) dispatchRemote(rm unhandledMessage) {
 	case 1:
 		metrics.ReportMessageProcessDelayFromCtx(rm.ctx, h.metricsReporters, "remote")
 		h.remoteService.remoteProcess(rm.ctx, nil, rm.agent, rm.route, rm.msg)
-	default:
+	case 2:
 		go func(rm unhandledMessage) {
 			metrics.ReportMessageProcessDelayFromCtx(rm.ctx, h.metricsReporters, "remote")
 			h.remoteService.remoteProcess(rm.ctx, nil, rm.agent, rm.route, rm.msg)

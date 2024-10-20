@@ -39,6 +39,9 @@ const ErrClientClosedRequest = "PIT-499"
 // ErrClosedRequest is a string code representing the closed request error
 const ErrClosedRequest = "PIT-498"
 
+// ErrServiceUnavailable is a string code representing the service under maintenance
+const ErrServiceUnavailable = "PIT-503"
+
 // Error is an error with a code, message and metadata
 type Error struct {
 	Code     string
@@ -46,7 +49,7 @@ type Error struct {
 	Metadata map[string]string
 }
 
-//NewError ctor
+// NewError ctor
 func NewError(err error, code string, metadata ...map[string]string) *Error {
 	if pitayaErr, ok := err.(*Error); ok {
 		if len(metadata) > 0 {
