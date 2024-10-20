@@ -343,12 +343,22 @@ func (h *HandlerService) processMessage(a agent.Agent, msg *message.Message) {
 }
 
 func (h *HandlerService) dispatchLocal(lm unhandledMessage) {
-	if h.dispatchPolicy == nil || h.dispatchPolicy(lm) == 0 {
-		h.chLocalProcess <- lm
-		return
+	policy := uint8(0)
+	if h.dispatchPolicy != nil {
+		policy = h.dispatchPolicy(lm)
 	}
-	metrics.ReportMessageProcessDelayFromCtx(lm.ctx, h.metricsReporters, "local")
-	h.localProcess(lm.ctx, lm.agent, lm.route, lm.msg)
+	switch policy {
+	case 0:
+		h.chLocalProcess <- lm
+	case 1:
+		metrics.ReportMessageProcessDelayFromCtx(lm.ctx, h.metricsReporters, "local")
+		h.localProcess(lm.ctx, lm.agent, lm.route, lm.msg)
+	default:
+		go func(lm unhandledMessage) {
+			metrics.ReportMessageProcessDelayFromCtx(lm.ctx, h.metricsReporters, "local")
+			h.localProcess(lm.ctx, lm.agent, lm.route, lm.msg)
+		}(lm)
+	}
 }
 
 func (h *HandlerService) dispatchRemote(rm unhandledMessage) {
@@ -356,11 +366,22 @@ func (h *HandlerService) dispatchRemote(rm unhandledMessage) {
 		logger.Log.Warnf("request made to another server type but no remoteService running")
 		return
 	}
-	if h.dispatchPolicy == nil || h.dispatchPolicy(rm) == 0 {
-		h.chRemoteProcess <- rm
+	policy := uint8(0)
+	if h.dispatchPolicy != nil {
+		policy = h.dispatchPolicy(rm)
 	}
-	metrics.ReportMessageProcessDelayFromCtx(rm.ctx, h.metricsReporters, "remote")
-	h.remoteService.remoteProcess(rm.ctx, nil, rm.agent, rm.route, rm.msg)
+	switch policy {
+	case 0:
+		h.chRemoteProcess <- rm
+	case 1:
+		metrics.ReportMessageProcessDelayFromCtx(rm.ctx, h.metricsReporters, "remote")
+		h.remoteService.remoteProcess(rm.ctx, nil, rm.agent, rm.route, rm.msg)
+	default:
+		go func(rm unhandledMessage) {
+			metrics.ReportMessageProcessDelayFromCtx(rm.ctx, h.metricsReporters, "remote")
+			h.remoteService.remoteProcess(rm.ctx, nil, rm.agent, rm.route, rm.msg)
+		}(rm)
+	}
 }
 
 func (h *HandlerService) localProcess(ctx context.Context, a agent.Agent, route *route.Route, msg *message.Message) {
