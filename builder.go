@@ -92,7 +92,11 @@ func NewBuilder(isFrontend bool,
 	serverMetadata map[string]string,
 	config config.PitayaConfig,
 ) *Builder {
-	server := cluster.NewServer(uuid.New().String(), serverType, isFrontend, serverMetadata)
+	serverId := uuid.New().String()
+	if serverMetadata["serverId"] != "" {
+		serverId = serverMetadata["serverId"]
+	}
+	server := cluster.NewServer(serverId, serverType, isFrontend, serverMetadata)
 	dieChan := make(chan bool)
 
 	metricsReporters := []metrics.Reporter{}
